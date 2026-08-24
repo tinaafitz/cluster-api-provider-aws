@@ -244,6 +244,13 @@ func (r *ROSAMachinePoolReconciler) reconcileNormal(ctx context.Context,
 		return ctrl.Result{}, fmt.Errorf("failed to validate ROSAMachinePool.spec: %w", err)
 	}
 	if failureMessage != nil {
+		// Surface the validation failure so it is observable to the user.
+		machinePoolScope.RosaMachinePool.Status.FailureMessage = failureMessage
+		v1beta1conditions.MarkFalse(machinePoolScope.RosaMachinePool,
+			expinfrav1.RosaMachinePoolReadyCondition,
+			expinfrav1.RosaMachinePoolReconciliationFailedReason,
+			clusterv1beta1.ConditionSeverityError,
+			"%s", *failureMessage)
 		// dont' requeue because input is invalid and manual intervention is needed.
 		return ctrl.Result{}, nil
 	}
@@ -435,6 +442,7 @@ func (r *ROSAMachinePoolReconciler) updateNodePool(machinePoolScope *scope.RosaM
 	desiredSpec.AdditionalSecurityGroups = nil
 	desiredSpec.AdditionalTags = nil
 	desiredSpec.VolumeSize = 0
+	desiredSpec.SpotMarketOptions = nil
 
 	npBuilder := nodePoolBuilder(desiredSpec, machinePoolScope.MachinePool.Spec, machinePoolScope.ControlPlane.Spec.ChannelGroup, machinePoolScope.ControlPlane.Spec.Channel)
 	nodePoolSpec, err := npBuilder.Build()
@@ -464,6 +472,7 @@ func computeSpecDiff(desiredSpec expinfrav1.RosaMachinePoolSpec, nodePool *cmv1.
 		"AdditionalTags",           // AdditionalTags day2 changes not supported.
 		"AdditionalSecurityGroups", // AdditionalSecurityGroups day2 changes not supported.
 		"VolumeSize",               // VolumeSize is immutable after creation.
+		"SpotMarketOptions",        // SpotMarketOptions is immutable, Day 1 only.
 	}
 
 	return cmp.Diff(desiredSpec, currentSpec,
@@ -472,6 +481,49 @@ func computeSpecDiff(desiredSpec expinfrav1.RosaMachinePoolSpec, nodePool *cmv1.
 }
 
 func validateMachinePoolSpec(machinePoolScope *scope.RosaMachinePoolScope) (*string, error) {
+	// The spotMarketOptions gate depends only on the control-plane version, not on the
+	// machine pool's own spec.version (which is optional and, when empty, inherits the
+	// control-plane version). Evaluate it unconditionally so it is not skipped in the
+	// common case where spec.version is omitted.
+	if machinePoolScope.RosaMachinePool.Spec.SpotMarketOptions != nil {
+		// Prefer the actually-running control-plane version (Status.Version) over the
+		// requested version (Spec.Version) when gating an OCM call, since Spec.Version
+		// only reflects intent and may not yet be rolled out. Fall back to Spec.Version
+		// when Status.Version is not yet populated.
+		cpVersion := machinePoolScope.ControlPlane.Status.Version
+		if cpVersion == "" {
+			cpVersion = machinePoolScope.ControlPlane.Spec.Version
+		}
+
+		// Empty version means the control plane has not reported a version yet. Surface a
+		// friendly, user-visible failure message rather than an error that requeues forever.
+		if cpVersion == "" {
+			message := "ControlPlane version is not yet available"
+			return &message, nil
+		}
+
+		// Use ParseTolerant so legitimate inputs like "4.22" (no patch) and "v4.22.0"
+		// (leading v) are accepted. On a genuinely unparsable version, surface a
+		// user-visible failure message (err=nil) so it reaches Status.FailureMessage
+		// instead of causing an infinite requeue.
+		controlPlaneVersion, err := semver.ParseTolerant(cpVersion)
+		if err != nil {
+			message := fmt.Sprintf("unable to parse ControlPlane version %q", cpVersion)
+			return &message, nil
+		}
+
+		// Compare on the {Major, Minor, Patch} triple only, ignoring any pre-release or
+		// build metadata. Otherwise pre-release versions such as "4.22.0-rc.1" would sort
+		// below "4.22.0" and be wrongly rejected, blocking RC/nightly-channel users.
+		gaVersion := controlPlaneVersion
+		gaVersion.Pre = nil
+		gaVersion.Build = nil
+		if gaVersion.LT(rosa.MinSpotMarketOptionsVersion) {
+			message := fmt.Sprintf("spotMarketOptions requires OpenShift version >= %s", rosa.MinSpotMarketOptionsVersion)
+			return &message, nil
+		}
+	}
+
 	if machinePoolScope.RosaMachinePool.Spec.Version == "" {
 		return nil, nil
 	}
@@ -542,6 +594,13 @@ func nodePoolBuilder(rosaMachinePoolSpec expinfrav1.RosaMachinePoolSpec, machine
 	if rosaMachinePoolSpec.CapacityReservationID != "" {
 		capacityReservation := cmv1.NewAWSCapacityReservation().Id(rosaMachinePoolSpec.CapacityReservationID)
 		awsNodePool = awsNodePool.CapacityReservation(capacityReservation)
+	}
+	if rosaMachinePoolSpec.SpotMarketOptions != nil {
+		spotOpts := cmv1.NewAwsNodePoolSpotMarketOptions()
+		if rosaMachinePoolSpec.SpotMarketOptions.MaxPrice != nil {
+			spotOpts = spotOpts.MaxPrice(*rosaMachinePoolSpec.SpotMarketOptions.MaxPrice)
+		}
+		awsNodePool = awsNodePool.SpotMarketOptions(spotOpts)
 	}
 	npBuilder.AWSNodePool(awsNodePool)
 

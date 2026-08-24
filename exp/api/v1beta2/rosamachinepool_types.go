@@ -132,6 +132,15 @@ type RosaMachinePoolSpec struct {
 	//
 	// +optional
 	CapacityReservationID string `json:"capacityReservationID,omitempty"`
+
+	// SpotMarketOptions configures the node pool to use AWS Spot instances.
+	// Providing an empty struct ({}) requests Spot with no max price.
+	// Providing MaxPrice limits the bid to that amount per hour.
+	// Incompatible with CapacityReservationID.
+	// Requires minimum OCP version 4.22.
+	// +immutable
+	// +optional
+	SpotMarketOptions *infrav1.SpotMarketOptions `json:"spotMarketOptions,omitempty"`
 }
 
 // RosaTaint represents a taint to be applied to a node.

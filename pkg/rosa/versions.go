@@ -12,6 +12,10 @@ import (
 // MinSupportedVersion is the minimum supported version for ROSA.
 var MinSupportedVersion = semver.MustParse("4.14.0")
 
+// MinSpotMarketOptionsVersion is the minimum OpenShift version that supports
+// configuring AWS Spot instances via SpotMarketOptions on a ROSA machine pool.
+var MinSpotMarketOptionsVersion = semver.MustParse("4.22.0")
+
 // CheckExistingScheduledUpgrade checks and returns the current upgrade schedule if any.
 func CheckExistingScheduledUpgrade(client OCMClient, cluster *cmv1.Cluster) (*cmv1.ControlPlaneUpgradePolicy, error) {
 	upgradePolicies, err := client.GetControlPlaneUpgradePolicies(cluster.ID())
