@@ -85,4 +85,3 @@ Notes:
 
 - `spotMarketOptions` is a Day-1 only setting and is **immutable**; it cannot be added, removed, or changed after the MachinePool is created.
 - It is incompatible with `capacityReservationID`; setting both is rejected by the validating webhook.
-- It requires an OpenShift version `>= 4.22`.

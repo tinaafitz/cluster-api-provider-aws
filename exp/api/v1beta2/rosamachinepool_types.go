@@ -140,6 +140,7 @@ type RosaMachinePoolSpec struct {
 	// Setting both spotMarketOptions and capacityReservationID is not allowed
 	// and is rejected by the validating webhook.
 	//
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf", message="spotMarketOptions is immutable"
 	// +immutable
 	// +optional
 	SpotMarketOptions *SpotMarketOptions `json:"spotMarketOptions,omitempty"`
