@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/utils/ptr"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-aws/v2/api/v1beta2"
 	expinfrav1 "sigs.k8s.io/cluster-api-provider-aws/v2/exp/api/v1beta2"
 )
 
@@ -44,7 +43,7 @@ func TestROSAMachinePoolValidateCreate(t *testing.T) {
 			name: "empty spotMarketOptions is accepted",
 			pool: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			wantErrToContain: nil,
@@ -53,7 +52,7 @@ func TestROSAMachinePoolValidateCreate(t *testing.T) {
 			name: "spotMarketOptions with maxPrice is accepted",
 			pool: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
 				},
 			},
 			wantErrToContain: nil,
@@ -62,7 +61,7 @@ func TestROSAMachinePoolValidateCreate(t *testing.T) {
 			name: "spotMarketOptions with capacityReservationID is rejected",
 			pool: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions:     &infrav1.SpotMarketOptions{},
+					SpotMarketOptions:     &expinfrav1.SpotMarketOptions{},
 					CapacityReservationID: "cr-123",
 				},
 			},
@@ -108,12 +107,12 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			name: "unchanged spotMarketOptions with maxPrice is accepted",
 			old: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
 				},
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
 				},
 			},
 			wantErrToContain: nil,
@@ -122,12 +121,12 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			name: "unchanged empty spotMarketOptions is accepted",
 			old: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			wantErrToContain: nil,
@@ -139,7 +138,7 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			wantErrToContain: ptr.To[string]("spec.spotMarketOptions"),
@@ -148,7 +147,7 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			name: "removing spotMarketOptions (set -> nil) is rejected as immutable",
 			old: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			new: &expinfrav1.ROSAMachinePool{
@@ -160,12 +159,12 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			name: "changing spotMarketOptions maxPrice is rejected as immutable",
 			old: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{MaxPrice: ptr.To("0.05")},
 				},
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{MaxPrice: ptr.To("0.10")},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{MaxPrice: ptr.To("0.10")},
 				},
 			},
 			wantErrToContain: ptr.To[string]("spec.spotMarketOptions"),
@@ -179,7 +178,7 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions: &infrav1.SpotMarketOptions{},
+					SpotMarketOptions: &expinfrav1.SpotMarketOptions{},
 				},
 			},
 			wantErrToContain: ptr.To[string]("spec.spotMarketOptions"),
@@ -193,7 +192,7 @@ func TestROSAMachinePoolValidateUpdate(t *testing.T) {
 			},
 			new: &expinfrav1.ROSAMachinePool{
 				Spec: expinfrav1.RosaMachinePoolSpec{
-					SpotMarketOptions:     &infrav1.SpotMarketOptions{},
+					SpotMarketOptions:     &expinfrav1.SpotMarketOptions{},
 					CapacityReservationID: "cr-123",
 				},
 			},

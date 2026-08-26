@@ -481,49 +481,6 @@ func computeSpecDiff(desiredSpec expinfrav1.RosaMachinePoolSpec, nodePool *cmv1.
 }
 
 func validateMachinePoolSpec(machinePoolScope *scope.RosaMachinePoolScope) (*string, error) {
-	// The spotMarketOptions gate depends only on the control-plane version, not on the
-	// machine pool's own spec.version (which is optional and, when empty, inherits the
-	// control-plane version). Evaluate it unconditionally so it is not skipped in the
-	// common case where spec.version is omitted.
-	if machinePoolScope.RosaMachinePool.Spec.SpotMarketOptions != nil {
-		// Prefer the actually-running control-plane version (Status.Version) over the
-		// requested version (Spec.Version) when gating an OCM call, since Spec.Version
-		// only reflects intent and may not yet be rolled out. Fall back to Spec.Version
-		// when Status.Version is not yet populated.
-		cpVersion := machinePoolScope.ControlPlane.Status.Version
-		if cpVersion == "" {
-			cpVersion = machinePoolScope.ControlPlane.Spec.Version
-		}
-
-		// Empty version means the control plane has not reported a version yet. Surface a
-		// friendly, user-visible failure message rather than an error that requeues forever.
-		if cpVersion == "" {
-			message := "ControlPlane version is not yet available"
-			return &message, nil
-		}
-
-		// Use ParseTolerant so legitimate inputs like "4.22" (no patch) and "v4.22.0"
-		// (leading v) are accepted. On a genuinely unparsable version, surface a
-		// user-visible failure message (err=nil) so it reaches Status.FailureMessage
-		// instead of causing an infinite requeue.
-		controlPlaneVersion, err := semver.ParseTolerant(cpVersion)
-		if err != nil {
-			message := fmt.Sprintf("unable to parse ControlPlane version %q", cpVersion)
-			return &message, nil
-		}
-
-		// Compare on the {Major, Minor, Patch} triple only, ignoring any pre-release or
-		// build metadata. Otherwise pre-release versions such as "4.22.0-rc.1" would sort
-		// below "4.22.0" and be wrongly rejected, blocking RC/nightly-channel users.
-		gaVersion := controlPlaneVersion
-		gaVersion.Pre = nil
-		gaVersion.Build = nil
-		if gaVersion.LT(rosa.MinSpotMarketOptionsVersion) {
-			message := fmt.Sprintf("spotMarketOptions requires OpenShift version >= %s", rosa.MinSpotMarketOptionsVersion)
-			return &message, nil
-		}
-	}
-
 	if machinePoolScope.RosaMachinePool.Spec.Version == "" {
 		return nil, nil
 	}

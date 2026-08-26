@@ -231,7 +231,6 @@ spec:
                       maxPrice:
                         description: MaxPrice defines the maximum price the user is
                           willing to pay for Spot VM instances
-                        pattern: ^[0-9]+(\.[0-9]+)?$
                         type: string
                     type: object
                   sshKeyName:
@@ -908,7 +907,6 @@ spec:
                       maxPrice:
                         description: MaxPrice defines the maximum price the user is
                           willing to pay for Spot VM instances
-                        pattern: ^[0-9]+(\.[0-9]+)?$
                         type: string
                     type: object
                   sshKeyName:
