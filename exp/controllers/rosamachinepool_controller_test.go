@@ -760,7 +760,7 @@ func matchesReplicas(replicas int) gomock.Matcher {
 	return replicasMatcher{replicas: replicas}
 }
 
-// TestConditionReasonFieldLengthValidation verifies reason constants comply with K8s 256-byte limit (ROSAENG-67380).
+// TestConditionReasonFieldLengthValidation verifies reason constants comply with K8s 256-byte limit.
 func TestConditionReasonFieldLengthValidation(t *testing.T) {
 	const maxReasonLength = 256
 
@@ -777,7 +777,7 @@ func TestConditionReasonFieldLengthValidation(t *testing.T) {
 	}
 }
 
-// TestRosaMachinePoolConditionReasonUsesConstant verifies reason uses short constant, not verbose text (ROSAENG-67380).
+// TestRosaMachinePoolConditionReasonUsesConstant verifies reason uses short constant, not verbose text.
 func TestRosaMachinePoolConditionReasonUsesConstant(t *testing.T) {
 	reason := expinfrav1.WaitingForNodePoolReason
 
@@ -795,7 +795,7 @@ func TestRosaMachinePoolConditionReasonUsesConstant(t *testing.T) {
 	}
 }
 
-// TestLongNodePoolMessageDoesntOverflowReason verifies long messages don't overflow reason field (ROSAENG-67380).
+// TestLongNodePoolMessageDoesntOverflowReason verifies long messages don't overflow reason field.
 func TestLongNodePoolMessageDoesntOverflowReason(t *testing.T) {
 	g := NewWithT(t)
 
