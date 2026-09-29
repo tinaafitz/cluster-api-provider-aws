@@ -287,11 +287,13 @@ func (r *ROSAMachinePoolReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, nil
 		}
 
+		// Separate reason (short constant) from message (verbose details) to comply
+		// with Kubernetes' 256-byte limit on condition.reason (ROSAENG-67380).
 		v1beta1conditions.MarkFalse(rosaMachinePool,
 			expinfrav1.RosaMachinePoolReadyCondition,
-			nodePool.Status().Message(),
+			expinfrav1.WaitingForNodePoolReason, // Keep reason <256 bytes (ROSAENG-67380)
 			clusterv1beta1.ConditionSeverityInfo,
-			"")
+			"%s", nodePool.Status().Message())
 
 		machinePoolScope.Info("waiting for NodePool to become ready", "state", nodePool.Status().Message())
 		// Requeue so that status.ready is set to true when the nodepool is fully created.

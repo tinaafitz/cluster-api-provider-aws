@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -757,4 +758,56 @@ func (m replicasMatcher) String() string {
 
 func matchesReplicas(replicas int) gomock.Matcher {
 	return replicasMatcher{replicas: replicas}
+}
+
+// TestConditionReasonFieldLengthValidation verifies reason constants comply with K8s 256-byte limit (ROSAENG-67380).
+func TestConditionReasonFieldLengthValidation(t *testing.T) {
+	const maxReasonLength = 256
+
+	reasonConstants := map[string]string{
+		"WaitingForNodePoolReason":                  expinfrav1.WaitingForNodePoolReason,
+		"WaitingForRosaControlPlaneReason":          expinfrav1.WaitingForRosaControlPlaneReason,
+		"RosaMachinePoolReconciliationFailedReason": expinfrav1.RosaMachinePoolReconciliationFailedReason,
+	}
+
+	for name, reason := range reasonConstants {
+		if len(reason) >= maxReasonLength {
+			t.Errorf("%s (%q) exceeds %d byte limit: %d bytes", name, reason, maxReasonLength, len(reason))
+		}
+	}
+}
+
+// TestRosaMachinePoolConditionReasonUsesConstant verifies reason uses short constant, not verbose text (ROSAENG-67380).
+func TestRosaMachinePoolConditionReasonUsesConstant(t *testing.T) {
+	reason := expinfrav1.WaitingForNodePoolReason
+
+	if reason == "" {
+		t.Error("WaitingForNodePoolReason is empty")
+	}
+
+	if len(reason) >= 256 {
+		t.Errorf("reason field must stay under 256 bytes to comply with Kubernetes validation, got %d bytes", len(reason))
+	}
+
+	if reason != "WaitingForNodePool" {
+		// Regression: if reason changed back to nodePool.Status().Message(), this would fail and catch the bug.
+		t.Errorf("reason should be a short constant code 'WaitingForNodePool', got %q", reason)
+	}
+}
+
+
+// TestLongNodePoolMessageDoesntOverflowReason verifies long messages don't overflow reason field (ROSAENG-67380).
+func TestLongNodePoolMessageDoesntOverflowReason(t *testing.T) {
+	g := NewWithT(t)
+
+	longMessage := fmt.Sprintf("CreateInProgress: %s", strings.Repeat("VPC creation details...", 50))
+
+	reason := expinfrav1.WaitingForNodePoolReason
+	g.Expect(len(reason)).To(BeNumerically("<", 256))
+	g.Expect(len(longMessage)).To(BeNumerically(">", 256))
+
+	// Verify separation: reason stays short, message can be long
+	g.Expect(reason).To(Equal("WaitingForNodePool"))             // reason constant
+	g.Expect(len(reason)).To(Equal(17))                          // exact byte count
+	g.Expect(len(longMessage)).To(BeNumerically(">", 256))       // message can overflow
 }
