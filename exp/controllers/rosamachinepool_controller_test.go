@@ -795,7 +795,6 @@ func TestRosaMachinePoolConditionReasonUsesConstant(t *testing.T) {
 	}
 }
 
-
 // TestLongNodePoolMessageDoesntOverflowReason verifies long messages don't overflow reason field (ROSAENG-67380).
 func TestLongNodePoolMessageDoesntOverflowReason(t *testing.T) {
 	g := NewWithT(t)
@@ -807,7 +806,7 @@ func TestLongNodePoolMessageDoesntOverflowReason(t *testing.T) {
 	g.Expect(len(longMessage)).To(BeNumerically(">", 256))
 
 	// Verify separation: reason stays short, message can be long
-	g.Expect(reason).To(Equal("WaitingForNodePool"))             // reason constant
-	g.Expect(len(reason)).To(Equal(17))                          // exact byte count
-	g.Expect(len(longMessage)).To(BeNumerically(">", 256))       // message can overflow
+	g.Expect(reason).To(Equal("WaitingForNodePool"))       // reason constant
+	g.Expect(len(reason)).To(Equal(17))                    // exact byte count
+	g.Expect(len(longMessage)).To(BeNumerically(">", 256)) // message can overflow
 }
