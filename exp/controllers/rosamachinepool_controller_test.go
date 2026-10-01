@@ -759,7 +759,7 @@ func TestRosaMachinePoolReconcile(t *testing.T) {
 		ocmMock.EXPECT().GetNodePool(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(clusterID string, nodePoolID string) (*cmv1.NodePool, bool, error) {
 				statusBuilder := (&cmv1.NodePoolStatusBuilder{}).Message(longMessage)
-				nodePool, buildErr := nodePoolBuilder(mp.Spec, omp.Spec, rosacontrolplanev1.Stable).
+				nodePool, buildErr := nodePoolBuilder(mp.Spec, omp.Spec, rosacontrolplanev1.Stable, "").
 					ID("node-pool-10").
 					Status(statusBuilder).
 					Build()
@@ -771,17 +771,11 @@ func TestRosaMachinePoolReconcile(t *testing.T) {
 				return nodePool, nil
 			}).Times(1)
 
-		stsMock := mock_stsiface.NewMockSTSClient(mockCtrl)
-		stsMock.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).Times(1)
-
 		r := ROSAMachinePoolReconciler{
 			Recorder:         record.NewFakeRecorder(10),
 			WatchFilterValue: "",
 			Client:           testEnv,
-			NewStsClient: func(cloud.ScopeUsage, cloud.Session, logger.Wrapper, runtime.Object) stsiface.STSClient {
-				return stsMock
-			},
-			NewOCMClient: func(rctx context.Context, rosaScope *scope.ROSAControlPlaneScope) (rosa.OCMClient, error) {
+			NewOCMClient: func(ctx context.Context, rosaScope *scope.ROSAControlPlaneScope) (rosa.OCMClient, error) {
 				return ocmMock, nil
 			},
 		}
