@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-aws/v2/test/mocks"
 	clusterv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+	v1beta1conditions "sigs.k8s.io/cluster-api/util/deprecated/v1beta1/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
 )
 
@@ -724,6 +725,86 @@ func TestRosaMachinePoolReconcile(t *testing.T) {
 		}
 		mockCtrl.Finish()
 	})
+
+	t.Run("Non-ready nodepool sets short reason constant and verbose message in condition", func(t *testing.T) {
+		g := NewWithT(t)
+
+		longMessage := fmt.Sprintf("CreateInProgress: %s", strings.Repeat("VPC creation details...", 50))
+		g.Expect(len(longMessage)).To(BeNumerically(">", 256), "precondition: longMessage must exceed 256 bytes")
+
+		mp := rosaMachinePool(10)
+		omp := ownerMachinePool(10)
+		oc := ownerCluster(10)
+		cp := rosaControlPlane(10)
+		objects := []client.Object{oc, omp, cp, mp}
+		for _, obj := range objects {
+			createObject(g, obj, ns.Name)
+		}
+		defer func() {
+			for _, obj := range objects {
+				cleanupObject(g, obj)
+			}
+		}()
+
+		cpPh, err := patch.NewHelper(cp, testEnv)
+		g.Expect(err).NotTo(HaveOccurred())
+		cp.Status.Ready = true
+		cp.Status.Version = cp.Spec.Version
+		g.Expect(cpPh.Patch(ctx, cp)).To(Succeed())
+
+		mockCtrl := gomock.NewController(t)
+		defer mockCtrl.Finish()
+
+		ocmMock := mocks.NewMockOCMClient(mockCtrl)
+		ocmMock.EXPECT().GetNodePool(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(clusterID string, nodePoolID string) (*cmv1.NodePool, bool, error) {
+				statusBuilder := (&cmv1.NodePoolStatusBuilder{}).Message(longMessage)
+				nodePool, buildErr := nodePoolBuilder(mp.Spec, omp.Spec, rosacontrolplanev1.Stable).
+					ID("node-pool-10").
+					Status(statusBuilder).
+					Build()
+				g.Expect(buildErr).NotTo(HaveOccurred())
+				return nodePool, true, nil
+			}).Times(1)
+		ocmMock.EXPECT().UpdateNodePool(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(clusterID string, nodePool *cmv1.NodePool) (*cmv1.NodePool, error) {
+				return nodePool, nil
+			}).Times(1)
+
+		stsMock := mock_stsiface.NewMockSTSClient(mockCtrl)
+		stsMock.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).Times(1)
+
+		r := ROSAMachinePoolReconciler{
+			Recorder:         record.NewFakeRecorder(10),
+			WatchFilterValue: "",
+			Client:           testEnv,
+			NewStsClient: func(cloud.ScopeUsage, cloud.Session, logger.Wrapper, runtime.Object) stsiface.STSClient {
+				return stsMock
+			},
+			NewOCMClient: func(rctx context.Context, rosaScope *scope.ROSAControlPlaneScope) (rosa.OCMClient, error) {
+				return ocmMock, nil
+			},
+		}
+
+		req := ctrl.Request{NamespacedName: types.NamespacedName{Name: mp.Name, Namespace: ns.Name}}
+		result, reconcileErr := r.Reconcile(ctx, req)
+		g.Expect(reconcileErr).NotTo(HaveOccurred())
+		g.Expect(result).To(Equal(ctrl.Result{RequeueAfter: time.Second * 60}))
+
+		time.Sleep(50 * time.Millisecond)
+
+		fetched := &expinfrav1.ROSAMachinePool{}
+		g.Expect(testEnv.Get(ctx, req.NamespacedName, fetched)).To(Succeed())
+
+		cond := v1beta1conditions.Get(fetched, expinfrav1.RosaMachinePoolReadyCondition)
+		g.Expect(cond).NotTo(BeNil(), "RosaMachinePoolReadyCondition should be set")
+		g.Expect(cond.Reason).To(Equal(expinfrav1.WaitingForNodePoolReason),
+			"reason must use the short constant, not the verbose nodepool message")
+		g.Expect(len(cond.Reason)).To(BeNumerically("<", 256),
+			"reason must stay within Kubernetes 256-byte limit")
+		g.Expect(cond.Message).To(ContainSubstring("CreateInProgress"),
+			"verbose details must appear in message, not reason")
+	})
 }
 
 func createObject(g *WithT, obj client.Object, namespace string) {
@@ -758,55 +839,4 @@ func (m replicasMatcher) String() string {
 
 func matchesReplicas(replicas int) gomock.Matcher {
 	return replicasMatcher{replicas: replicas}
-}
-
-// TestConditionReasonFieldLengthValidation verifies reason constants comply with K8s 256-byte limit.
-func TestConditionReasonFieldLengthValidation(t *testing.T) {
-	const maxReasonLength = 256
-
-	reasonConstants := map[string]string{
-		"WaitingForNodePoolReason":                  expinfrav1.WaitingForNodePoolReason,
-		"WaitingForRosaControlPlaneReason":          expinfrav1.WaitingForRosaControlPlaneReason,
-		"RosaMachinePoolReconciliationFailedReason": expinfrav1.RosaMachinePoolReconciliationFailedReason,
-	}
-
-	for name, reason := range reasonConstants {
-		if len(reason) >= maxReasonLength {
-			t.Errorf("%s (%q) exceeds %d byte limit: %d bytes", name, reason, maxReasonLength, len(reason))
-		}
-	}
-}
-
-// TestRosaMachinePoolConditionReasonUsesConstant verifies reason uses short constant, not verbose text.
-func TestRosaMachinePoolConditionReasonUsesConstant(t *testing.T) {
-	reason := expinfrav1.WaitingForNodePoolReason
-
-	if reason == "" {
-		t.Error("WaitingForNodePoolReason is empty")
-	}
-
-	if len(reason) >= 256 {
-		t.Errorf("reason field must stay under 256 bytes to comply with Kubernetes validation, got %d bytes", len(reason))
-	}
-
-	if reason != "WaitingForNodePool" {
-		// Regression: if reason changed back to nodePool.Status().Message(), this would fail and catch the bug.
-		t.Errorf("reason should be a short constant code 'WaitingForNodePool', got %q", reason)
-	}
-}
-
-// TestLongNodePoolMessageDoesntOverflowReason verifies long messages don't overflow reason field.
-func TestLongNodePoolMessageDoesntOverflowReason(t *testing.T) {
-	g := NewWithT(t)
-
-	longMessage := fmt.Sprintf("CreateInProgress: %s", strings.Repeat("VPC creation details...", 50))
-
-	reason := expinfrav1.WaitingForNodePoolReason
-	g.Expect(len(reason)).To(BeNumerically("<", 256))
-	g.Expect(len(longMessage)).To(BeNumerically(">", 256))
-
-	// Verify separation: reason stays short, message can be long
-	g.Expect(reason).To(Equal("WaitingForNodePool"))       // reason constant
-	g.Expect(len(reason)).To(Equal(17))                    // exact byte count
-	g.Expect(len(longMessage)).To(BeNumerically(">", 256)) // message can overflow
 }
