@@ -287,8 +287,6 @@ func (r *ROSAMachinePoolReconciler) reconcileNormal(ctx context.Context,
 			return ctrl.Result{}, nil
 		}
 
-		// Separate reason (short constant) from message (verbose details) to comply
-		// with Kubernetes' 256-byte limit on condition.reason.
 		v1beta1conditions.MarkFalse(rosaMachinePool,
 			expinfrav1.RosaMachinePoolReadyCondition,
 			expinfrav1.WaitingForNodePoolReason,
